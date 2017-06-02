@@ -1,5 +1,7 @@
 <?php
-
+if (isset($_SERVER["HTTP_CF_CONNECTING_IP"])) {
+$_SERVER['REMOTE_ADDR'] = $_SERVER["HTTP_CF_CONNECTING_IP"];
+}
 //  ss-panel v3 配置
 //
 // !!! 修改此key为随机字符串确保网站安全 !!!
