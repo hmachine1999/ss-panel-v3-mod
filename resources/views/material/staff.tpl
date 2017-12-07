@@ -64,6 +64,81 @@
 							<div class="card">
 								<div class="card-main">
 									<div class="card-inner">
+										<h2 class="content-sub-heading">本程序参与人员列表</h2>
+										    <p>此列表为参与到 glzjin mod </a> 中的人员，在此表示感谢。</p>
+									</div>
+								</div>
+							</div>
+
+
+
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">原作</h2>
+											<p>orvice</a></p>
+									</div>
+								</div>
+							</div>
+							
+							
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">现阶段维护</h2>
+											<p>esdeathlove</a></p>
+									</div>
+								</div>
+							</div>
+
+
+
+
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">监督</h2>
+											<p>（曾经的）glzjin</a></p>
+									</div>
+								</div>
+							</div>
+
+
+
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">作画</h2>
+											<p>Daemonite</a></p>
+											<p>（曾经的）glzjin</a></p>
+									</div>
+								</div>
+							</div>
+
+
+
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">出演</h2>
+											<p>（曾经的）glzjin</a></p>
+											<p>mengyang</a></p>
+											<p>tony</a></p>
+									</div>
+								</div>
+							</div>
+
+
+
+							<div class="card">
+								<div class="card-main">
+									<div class="card-inner">
+											<h2 class="content-sub-heading">鸣谢</h2>
+											<p>所有被引用过代码的同学，以及所有提交过issue的同学。当然，还有在使用这份程序的你我Ta。</p>
+									</div>
+								</div>
+							</div>
+
 
 
 						</section>

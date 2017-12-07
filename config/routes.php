@@ -152,6 +152,8 @@ $app->group('/user', function () {
     $this->post('/unblock', 'App\Controllers\UserController:Unblock');
     $this->get('/bought', 'App\Controllers\UserController:bought');
     $this->delete('/bought', 'App\Controllers\UserController:deleteBoughtGet');
+
+    $this->get('/url_reset', 'App\Controllers\UserController:resetURL');
 })->add(new Auth());
 
 // Auth
@@ -251,9 +253,11 @@ $app->group('/admin', function () {
     $this->get('/unblock', 'App\Controllers\Admin\IpController:unblock');
     $this->post('/unblock', 'App\Controllers\Admin\IpController:doUnblock');
     $this->get('/login', 'App\Controllers\Admin\IpController:index');
+    $this->get('/alive', 'App\Controllers\Admin\IpController:alive');
     $this->post('/block/ajax', 'App\Controllers\Admin\IpController:ajax_block');
     $this->post('/unblock/ajax', 'App\Controllers\Admin\IpController:ajax_unblock');
     $this->post('/login/ajax', 'App\Controllers\Admin\IpController:ajax_login');
+    $this->post('/alive/ajax', 'App\Controllers\Admin\IpController:ajax_alive');
 
     // Code Mange
     $this->get('/code', 'App\Controllers\Admin\CodeController:index');

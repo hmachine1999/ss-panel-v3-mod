@@ -225,6 +225,12 @@ class User extends Model
         $total = Ip::where("datetime", ">=", time()-90)->where('userid', $uid)->orderBy('userid', 'desc')->get();
         $unique_ip_list = array();
         foreach ($total as $single_record) {
+            $single_record->ip = Tools::getRealIp($single_record->ip);
+            $is_node = Node::where("node_ip", $single_record->ip)->first();
+            if($is_node) {
+                continue;
+            }
+
             if (!in_array($single_record->ip, $unique_ip_list)) {
                 array_push($unique_ip_list, $single_record->ip);
             }
@@ -310,7 +316,7 @@ class User extends Model
         $location=$iplocation->getlocation($reg_location);
         $reg_location .= "\n".iconv('gbk', 'utf-8//IGNORE', $location['country'].$location['area']);
 
-        $return_array = Array('DT_RowId' => 'row_user_'.$id, $id, $id,
+        $return_array = Array('DT_RowId' => 'row_1_'.$id, $id, $id,
                               $this->attributes['user_name'], $this->attributes['remark'],
                               $this->attributes['email'], $this->attributes['money'],
                               $im_type, $im_value,

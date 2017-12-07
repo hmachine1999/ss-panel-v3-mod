@@ -8,7 +8,7 @@ $_SERVER['REMOTE_ADDR'] = $_SERVER["HTTP_CF_CONNECTING_IP"];
 $System_Config['key'] = '';
 $System_Config['debug'] =  'false';  //  正式环境请确保为false
 $System_Config['appName'] = '';             //站点名称
-$System_Config['baseUrl'] = '/';            // 站点地址
+$System_Config['baseUrl'] = '.com/';            // 站点地址
 $System_Config['timeZone'] = 'PRC';        // RPC 天朝时间  UTC 格林时间
 $System_Config['pwdMethod'] = 'sha256';       // 密码加密   可选 md5,sha256
 $System_Config['salt'] = '';               // 密码加密用，从旧版升级请留空
@@ -29,7 +29,7 @@ $System_Config['checkinMin'] = '10';       // 签到最少流量 单位MB
 $System_Config['checkinMax'] = '100';       // 签到最多流量
 
 //
-$System_Config['defaultTraffic'] = '50';      // 用户初始流量 单位GB
+$System_Config['defaultTraffic'] = '0.5';      // 用户初始流量 单位GB
 
 // 注册后获得的邀请码数量
 $System_Config['inviteNum'] = '0';
@@ -39,7 +39,7 @@ $System_Config['db_driver'] = 'mysql';
 $System_Config['db_host'] = 'localhost';
 $System_Config['db_database'] = '';
 $System_Config['db_username'] = '';
-$System_Config['db_password'] = '';
+$System_Config['db_password'] = 'a';
 $System_Config['db_charset'] = 'utf8';
 $System_Config['db_collation'] = 'utf8_general_ci';
 $System_Config['db_prefix'] = '';
@@ -57,10 +57,10 @@ $System_Config['mailgun_domain'] = '';
 $System_Config['mailgun_sender'] = '';
 
 # smtp
-$System_Config['smtp_host'] = 'smtp.aliyun.com';
-$System_Config['smtp_username'] = '@aliyun.com';
+$System_Config['smtp_host'] = 'smtp..com';
+$System_Config['smtp_username'] = '.com';
 $System_Config['smtp_port'] = '465';
-$System_Config['smtp_name'] = '';
+$System_Config['smtp_name'] = 'S';
 $System_Config['smtp_sender'] = '@aliyun.com';
 $System_Config['smtp_passsword'] = '';
 $System_Config['smtp_ssl'] = 'true';
@@ -81,7 +81,7 @@ $System_Config['enable_duoshuo']='false';
 
 
 #用户过期时间，在注册时设置。（天）
-$System_Config['user_expire_in_default']='30';
+$System_Config['user_expire_in_default']='0.5';
 
 #Radius数据库设置
 $System_Config['radius_db_host']='';
@@ -142,11 +142,11 @@ $System_Config['wecenter_cookie_prefix']='mmg_';
 $System_Config['wecenter_cookie_key']='';
 
 #充值返利百分比
-$System_Config['code_payback']='10';
+$System_Config['code_payback']='20';
 
 #注册时的流量重置日以及需要重置的流量,0不重置
 $System_Config['reg_auto_reset_day']='0';
-$System_Config['reg_auto_reset_bandwidth']='100';
+$System_Config['reg_auto_reset_bandwidth']='0';
 
 #Cloudxns
 $System_Config['cloudxns_apikey']='';#自己去 cloudxns.net 申请
@@ -158,7 +158,7 @@ $System_Config['cloudxns_domain']='zhaoj.in';#你的域名
 #自动备份设置
 $System_Config['enable_auto_backup']='true';
 $System_Config['auto_backup_email']='@gmail.com';
-$System_Config['auto_backup_webroot']='/home/wwroot/.com/';
+$System_Config['auto_backup_webroot']='/home/wwwroot/.com/';
 $System_Config['auto_backup_passwd']='';
 
 #跳转延时,ms
@@ -170,7 +170,7 @@ $System_Config['jump_delay']='1800';
 $System_Config['enable_invite_code']='true';
 
 #是否启用邮箱验证码
-$System_Config['enable_email_verify']='true';
+$System_Config['enable_email_verify']='false';
 
 #邮箱验证码有效期
 $System_Config['email_verify_ttl']='3600';
@@ -206,7 +206,7 @@ $System_Config['enable_login_bind_ip']='true';
 
 
 #等级到期时是否重置流量
-$System_Config['enable_class_expire_reset']='true';
+$System_Config['enable_class_expire_reset']='false';
 
 #等级到期时重置为的流量值，GB
 $System_Config['enable_class_expire_reset_traffic']='0';
@@ -218,7 +218,7 @@ $System_Config['enable_account_expire_reset']='true';
 $System_Config['enable_account_expire_reset_traffic']='0';
 
 #购买时是否重置流量
-$System_Config['enable_bought_reset']='true';
+$System_Config['enable_bought_reset']='false';
 
 #账户到期之后是否会删除账户
 $System_Config['enable_account_expire_delete']='false';
@@ -227,8 +227,8 @@ $System_Config['enable_account_expire_delete']='false';
 $System_Config['enable_account_expire_delete_days']='0';
 
 #验证码相关设置，自己去 Geetest.com 申请
-$System_Config['geetest_id']='';
-$System_Config['geetest_key']='';
+$System_Config['geetest_id']='286367fa';
+$System_Config['geetest_key']='7d4f9bf';
 #启用注册验证码
 $System_Config['enable_geetest_reg']='false';
 
@@ -249,7 +249,7 @@ $System_Config['enable_auto_clean_unused_days']='30';
 
 
 #是否夹带统计代码，自己在 resources/views/{主题名} 下创建一个 analytics.tpl ，如果有必要就用 literal 界定符
-$System_Config['enable_analytics_code']='false';
+$System_Config['enable_analytics_code']='true';
 
 #是否启用捐赠相关功能
 $System_Config['enable_donate']='false';
@@ -258,13 +258,13 @@ $System_Config['enable_donate']='false';
 $System_Config['enable_telegram']='false';
 
 #telegram bot,bot 的 token ，跟 father bot 申请
-$System_Config['telegram_token']='';
+$System_Config['telegram_token']='259';
 
 #telegram bot,群组会话 ID,把机器人拉进群里之后跟他 /ping 一下即可得到。
-$System_Config['telegram_chatid']='';
+$System_Config['telegram_chatid']='-175441880';
 
 #多用户混淆参数后缀
-$System_Config['mu_suffix']='baidu.com';
+$System_Config['mu_suffix']='bing.com';
 
 #多用户混淆参数表达式，%5m代表取用户特征 md5 的前五位，%id 代表用户id,%suffix 代表上面这个后缀。
 $System_Config['mu_regex']='%5m%id.%suffix';
@@ -276,7 +276,7 @@ $System_Config['tuling_apikey']='';
 $System_Config['tuling_apisecert']='';
 
 #Telegram 机器人账号
-$System_Config['telegram_bot']='_bot';
+$System_Config['telegram_bot']='shackdowsbot';
 
 #Telegram 机器人在群组中不回应
 $System_Config['telegram_group_quiet']='false';
@@ -285,7 +285,7 @@ $System_Config['telegram_group_quiet']='false';
 $System_Config['telegram_qrcode']='zxing_local';
 
 #Telegram 机器人请求Key，随意设置，由大小写英文和数字组成，复杂一些，用于校验请求，更新这个参数之后请 php xcat setTelegram
-$System_Config['telegram_request_token']='sjhueAMAndnenw2k2k1mmsJSJWMWiwiwthgfhgfh';
+$System_Config['telegram_request_token']='';
 
 # sendgrid
 $System_Config['sendgrid_key'] = '';
@@ -297,10 +297,10 @@ $System_Config['sendgrid_sender'] = '';
 #取值 paymentwall,zfbjk,spay,none
 $System_Config['payment_system']='f2fpay';
 #alipay,f2fpay.com
-$System_Config['f2fpay_app_id']='';
-$System_Config['f2fpay_p_id']='';
-$System_Config['alipay_public_key']=''
-$System_Config['merchant_private_key']=''
+$System_Config['f2fpay_app_id']='20170';
+$System_Config['f2fpay_p_id']='2088002';
+$System_Config['alipay_public_key']='
+$System_Config['merchant_private_key']='
 #PaymentWall
 $System_Config['pmw_publickey']='';
 $System_Config['pmw_privatekey']='';

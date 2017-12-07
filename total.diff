@@ -1,0 +1,1203 @@
+diff --git a/.gitignore b/.gitignore
+index 5cef197..0a17da4 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,3 +5,4 @@ composer.phar
+ public/.user.ini
+ storage/*
+ config/.config.php
++resources/views/material/analytics.tpl
+diff --git a/app/Command/Job.php b/app/Command/Job.php
+index 1ce1828..2496443 100755
+--- a/app/Command/Job.php
++++ b/app/Command/Job.php
+@@ -141,6 +141,50 @@ class Job
+         DetectLog::where("datetime", "<", time()-86400*3)->delete();
+         Telegram::Send("姐姐姐姐，数据库被清理了，感觉身体被掏空了呢~");
+ 
++        //auto reset
++        $boughts=Bought::all();
++        foreach ($boughts as $bought) {
++            $user=User::where("id", $bought->userid)->first();
++
++            if ($user == null) {
++                $bought->delete();
++                continue;
++            }
++
++            $shop=Shop::where("id", $bought->shopid)->first();
++
++            if ($shop == null) {
++                $bought->delete();
++                continue;
++            }
++
++            if($shop->reset() != 0 && $shop->reset_value() != 0 && $shop->reset_exp() != 0) {
++              if(time() - $shop->reset_exp() * 86400 < $bought->datetime) {
++                if(intval((time() - $bought->datetime) / 86400) % $shop->reset() == 0 && intval((time() - $bought->datetime) / 86400) != 0) {
++                  echo("流量重置-".$user->id."\n");
++                  $user->transfer_enable = Tools::toGB($shop->reset_value());
++                  $user->u = 0;
++                  $user->d = 0;
++                  $user->last_day_t = 0;
++                  $user->save();
++
++                  $subject = Config::get('appName')."-您的流量被重置了";
++                  $to = $user->email;
++                  $text = "您好，根据您所订购的订单 ID:".$bought->id."，流量已经被重置为".$shop->reset_value().'GB' ;
++                  try {
++                      Mail::send($to, $subject, 'news/warn.tpl', [
++                          "user" => $user,"text" => $text
++                      ], [
++                      ]);
++                  } catch (Exception $e) {
++                      echo $e->getMessage();
++                  }
++                }
++              }
++            }
++
++        }
++
+ 
+         $users = User::all();
+         foreach ($users as $user) {
+@@ -154,6 +198,18 @@ class Job
+                 $user->last_day_t = 0;
+                 $user->transfer_enable = $user->auto_reset_bandwidth*1024*1024*1024;
+                 $user->save();
++
++                $subject = Config::get('appName')."-您的流量被重置了";
++                $to = $user->email;
++                $text = "您好，根据管理员的设置，流量已经被重置为".$user->auto_reset_bandwidth.'GB' ;
++                try {
++                    Mail::send($to, $subject, 'news/warn.tpl', [
++                        "user" => $user,"text" => $text
++                    ], [
++                    ]);
++                } catch (Exception $e) {
++                    echo $e->getMessage();
++                }
+             }
+         }
+ 
+diff --git a/app/Controllers/Admin/ShopController.php b/app/Controllers/Admin/ShopController.php
+index c0a342d..2ed1c8c 100755
+--- a/app/Controllers/Admin/ShopController.php
++++ b/app/Controllers/Admin/ShopController.php
+@@ -55,6 +55,18 @@ class ShopController extends AdminController
+             $content["class_expire"]=$request->getParam('class_expire');
+         }
+ 
++        if ($request->getParam('reset')!=0) {
++            $content["reset"]=$request->getParam('reset');
++        }
++
++        if ($request->getParam('reset_value')!=0) {
++            $content["reset_value"]=$request->getParam('reset_value');
++        }
++
++        if ($request->getParam('reset_exp')!=0) {
++            $content["reset_exp"]=$request->getParam('reset_exp');
++        }
++
+         $shop->content=json_encode($content);
+ 
+ 
+@@ -115,6 +127,18 @@ class ShopController extends AdminController
+             $content["class_expire"]=$request->getParam('class_expire');
+         }
+ 
++        if ($request->getParam('reset')!=0) {
++            $content["reset"]=$request->getParam('reset');
++        }
++
++        if ($request->getParam('reset_value')!=0) {
++            $content["reset_value"]=$request->getParam('reset_value');
++        }
++
++        if ($request->getParam('reset_exp')!=0) {
++            $content["reset_exp"]=$request->getParam('reset_exp');
++        }
++
+         $shop->content=json_encode($content);
+ 
+         if (!$shop->save()) {
+diff --git a/app/Models/Shop.php b/app/Models/Shop.php
+index 180da3a..42a96a9 100755
+--- a/app/Models/Shop.php
++++ b/app/Models/Shop.php
+@@ -25,23 +25,26 @@ class Shop extends Model
+                 case "class":
+                     $content_text .= "为账号升级为等级 ".$value." ,有效期 ".$content["class_expire"]." 天";
+                     break;
++                case "reset":
++                    $content_text .= " 在 ".$content["reset_exp"]." 天内，每 ".$value." 天重置流量为 ".$content["reset_value"]." G ";
++                    break;
+                 default:
+             }
+-            
+-            if ($i<count($content)&&$key!="class_expire") {
++
++            if ($i<count($content)&&$key!="reset_exp") {
+                 $content_text .= ",";
+             }
+-            
++
+             $i++;
+         }
+-        
++
+         if (substr($content_text, -1, 1)==",") {
+             $content_text=substr($content_text, 0, -1);
+         }
+-        
++
+         return $content_text;
+     }
+-    
++
+     public function bandwidth()
+     {
+         $content =  json_decode($this->attributes['content']);
+@@ -51,7 +54,7 @@ class Shop extends Model
+             return 0;
+         }
+     }
+-    
++
+     public function expire()
+     {
+         $content =  json_decode($this->attributes['content']);
+@@ -61,7 +64,37 @@ class Shop extends Model
+             return 0;
+         }
+     }
+-    
++
++    public function reset()
++    {
++        $content =  json_decode($this->attributes['content']);
++        if (isset($content->reset)) {
++            return $content->reset;
++        } else {
++            return 0;
++        }
++    }
++
++    public function reset_value()
++    {
++        $content =  json_decode($this->attributes['content']);
++        if (isset($content->reset_value)) {
++            return $content->reset_value;
++        } else {
++            return 0;
++        }
++    }
++
++    public function reset_exp()
++    {
++        $content =  json_decode($this->attributes['content']);
++        if (isset($content->reset_exp)) {
++            return $content->reset_exp;
++        } else {
++            return 0;
++        }
++    }
++
+     public function user_class()
+     {
+         $content =  json_decode($this->attributes['content']);
+@@ -71,7 +104,7 @@ class Shop extends Model
+             return 0;
+         }
+     }
+-    
++
+     public function class_expire()
+     {
+         $content =  json_decode($this->attributes['content']);
+@@ -81,12 +114,12 @@ class Shop extends Model
+             return 0;
+         }
+     }
+-    
++
+     public function buy($user, $is_renew = 0)
+     {
+         $content = json_decode($this->attributes['content'], true);
+         $content_text="";
+-        
++
+         foreach ($content as $key=>$value) {
+             switch ($key) {
+                 case "bandwidth":
+@@ -127,7 +160,7 @@ class Shop extends Model
+                 default:
+             }
+         }
+-        
++
+         $user->save();
+     }
+ }
+diff --git a/app/Utils/Pay.php b/app/Utils/Pay.php
+index 9fd09c3..30b7223 100755
+--- a/app/Utils/Pay.php
++++ b/app/Utils/Pay.php
+@@ -25,8 +25,8 @@ class Pay
+         }
+         return null;
+     }
+-    
+-    
++
++
+     private static function spay_html($user)
+     {
+         return '
+@@ -37,7 +37,7 @@ class Pay
+ 						</form>
+ ';
+     }
+-    
++
+     private static function zfbjk_html($user)
+     {
+         return '
+@@ -45,7 +45,7 @@ class Pay
+ 						<img src="'.Config::get('zfbjk_qrcodeurl').'"/>
+ ';
+     }
+-    
++
+     private static function pmw_html($user)
+     {
+         \Paymentwall_Config::getInstance()->set(array(
+@@ -53,7 +53,7 @@ class Pay
+             'public_key' => Config::get('pmw_publickey'),
+             'private_key' => Config::get('pmw_privatekey')
+         ));
+-        
++
+         $widget = new \Paymentwall_Widget(
+             $user->id, // id of the end-user who's making the payment
+             Config::get('pmw_widget'),      // widget code, e.g. p1; can be picked inside of your merchant account
+@@ -71,35 +71,35 @@ class Pay
+                     )
+             ) // additional parameters
+         );
+-        
++
+         return $widget->getHtmlCode(array("height"=>Config::get('pmw_height'),"width"=>"100%"));
+     }
+-    
++
+     private static function spay_gen($user, $amount)
+     {
+-        
++
+         /**************************请求参数**************************/
+-        
++
+         $alipay_config = Spay_tool::getConfig();
+-        
++
+         $pl = new Paylist();
+         $pl->userid = $user->id;
+         $pl->total = $amount;
+         $pl->save();
+-        
++
+         //商户订单号，商户网站订单系统中唯一订单号，必填
+         $out_trade_no = $pl->id;
+-        
++
+         //订单名称，必填
+         $subject = $pl->id."UID".$user->id." 充值".$amount."元";
+-        
++
+         //付款金额，必填
+         $total_fee = (float)$amount;
+-        
++
+         //商品描述，可空
+         $body = $user->id;
+         /************************************************************/
+-        
++
+         //构造要请求的参数数组，无需改动
+         $parameter = array(
+         "service" => "create_direct_pay_by_user",
+@@ -116,8 +116,8 @@ class Pay
+         echo $html_text;
+         exit(0);
+     }
+-    
+-    
++
++
+     public static function getGen($user, $amount)
+     {
+         $driver = Config::get("payment_system");
+@@ -133,157 +133,155 @@ class Pay
+         }
+         return null;
+     }
+-    
++
+     private static function spay_callback()
+     {
+-        if (Config::get('enable_alipay')!='false') {
+-            //计算得出通知验证结果
+-            $alipayNotify = new Spay_notify(Spay_tool::getConfig());
+-            $verify_result = $alipayNotify->verifyNotify();
+-
+-            if ($verify_result) {//验证成功
+-                    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+-                    //请在这里加上商户的业务逻辑程序代
+-
+-                    
+-                    //——请根据您的业务逻辑来编写程序（以下代码仅作参考）——
+-                    
+-                    //获取支付宝的通知返回参数，可参考技术文档中服务器异步通知参数列表
+-                    
+-                    //商户订单号
+-
+-                    $out_trade_no = $_POST['out_trade_no'];
+-
+-                    //支付宝交易号
+-
+-                    $trade_no = $_POST['trade_no'];
+-
+-                    //交易状态
+-                    $trade_status = $_POST['trade_status'];
+-                    
+-                $trade = Paylist::where("id", '=', $out_trade_no)->where('status', 0)->where('total', $_POST['total_fee'])->first();
+-            
+-                if ($trade == null) {
+-                    exit("success");
+-                }
+-                    
+-                $trade->tradeno = $trade_no;
+-                $trade->status = 1;
+-                $trade->save();
+-
+-                    //status
+-                    $trade_status = $_POST['trade_status'];
+-
+-
+-                if ($_POST['trade_status'] == 'TRADE_FINISHED') {
+-                    //判断该笔订单是否在商户网站中已经做过处理
+-                            //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
+-                            //请务必判断请求时的total_fee、seller_id与通知时获取的total_fee、seller_id为一致的
+-                            //如果有做过处理，不执行商户的业务程序
+-                                
+-                        //注意：
+-                        //退款日期超过可退款期限后（如三个月可退款），支付宝系统发送该交易状态通知
+-
+-                        //调试用，写文本函数记录程序运行情况是否正常
+-                        //logResult("这里写入想要调试的代码变量值，或其他运行的结果记录");
+-                        
+-                        
+-                        
+-                        $user=User::find($trade->userid);
+-                    $user->money=$user->money+$_POST['total_fee'];
+-                    $user->save();
+-                        
+-                    $codeq=new Code();
+-                    $codeq->code="支付宝 充值";
+-                    $codeq->isused=1;
+-                    $codeq->type=-1;
+-                    $codeq->number=$_POST['total_fee'];
+-                    $codeq->usedatetime=date("Y-m-d H:i:s");
+-                    $codeq->userid=$user->id;
+-                    $codeq->save();
+-                      
+-                      
+-                        
+-                        
+-                    if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
+-                        $gift_user=User::where("id", "=", $user->ref_by)->first();
+-                        $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
+-                        $gift_user->save();
+-                            
+-                        $Payback=new Payback();
+-                        $Payback->total=$_POST['total_fee'];
+-                        $Payback->userid=$user->id;
+-                        $Payback->ref_by=$user->ref_by;
+-                        $Payback->ref_get=$codeq->number*(Config::get('code_payback')/100);
+-                        $Payback->datetime=time();
+-                        $Payback->save();
+-                    }
+-                } elseif ($_POST['trade_status'] == 'TRADE_SUCCESS') {
+-                    //判断该笔订单是否在商户网站中已经做过处理
+-                            //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
+-                            //请务必判断请求时的total_fee、seller_id与通知时获取的total_fee、seller_id为一致的
+-                            //如果有做过处理，不执行商户的业务程序
+-                                
+-                        //注意：
+-                        //付款完成后，支付宝系统发送该交易状态通知
+-
+-                        //调试用，写文本函数记录程序运行情况是否正常
+-                        //logResult("这里写入想要调试的代码变量值，或其他运行的结果记录");
+-                        
+-                        $user=User::find($trade->userid);
+-                    $user->money=$user->money+$_POST['total_fee'];
+-                    $user->save();
+-                        
+-                    $codeq=new Code();
+-                    $codeq->code="支付宝 充值";
+-                    $codeq->isused=1;
+-                    $codeq->type=-1;
+-                    $codeq->number=$_POST['total_fee'];
+-                    $codeq->usedatetime=date("Y-m-d H:i:s");
+-                    $codeq->userid=$user->id;
+-                    $codeq->save();
+-                      
+-                      
+-                        
+-                        
+-                    if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
+-                        $gift_user=User::where("id", "=", $user->ref_by)->first();
+-                        $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
+-                        $gift_user->save();
+-                            
+-                        $Payback=new Payback();
+-                        $Payback->total=$_POST['total_fee'];
+-                        $Payback->userid=$user->id;
+-                        $Payback->ref_by=$user->ref_by;
+-                        $Payback->ref_get=$codeq->number*(Config::get('code_payback')/100);
+-                        $Payback->datetime=time();
+-                        $Payback->save();
+-                    }
++        //计算得出通知验证结果
++        $alipayNotify = new Spay_notify(Spay_tool::getConfig());
++        $verify_result = $alipayNotify->verifyNotify();
++
++        if ($verify_result) {//验证成功
++              /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++              //请在这里加上商户的业务逻辑程序代
++
++
++              //——请根据您的业务逻辑来编写程序（以下代码仅作参考）——
++
++              //获取支付宝的通知返回参数，可参考技术文档中服务器异步通知参数列表
++
++              //商户订单号
++
++              $out_trade_no = $_POST['out_trade_no'];
++
++              //支付宝交易号
++
++              $trade_no = $_POST['trade_no'];
++
++              //交易状态
++              $trade_status = $_POST['trade_status'];
++
++              $trade = Paylist::where("id", '=', $out_trade_no)->where('status', 0)->where('total', $_POST['total_fee'])->first();
++
++              if ($trade == null) {
++                  exit("success");
++              }
++
++              $trade->tradeno = $trade_no;
++              $trade->status = 1;
++              $trade->save();
++
++              //status
++              $trade_status = $_POST['trade_status'];
++
++
++            if ($_POST['trade_status'] == 'TRADE_FINISHED') {
++                //判断该笔订单是否在商户网站中已经做过处理
++                //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
++                //请务必判断请求时的total_fee、seller_id与通知时获取的total_fee、seller_id为一致的
++                //如果有做过处理，不执行商户的业务程序
++
++                //注意：
++                //退款日期超过可退款期限后（如三个月可退款），支付宝系统发送该交易状态通知
++
++                //调试用，写文本函数记录程序运行情况是否正常
++                //logResult("这里写入想要调试的代码变量值，或其他运行的结果记录");
++
++
++
++                $user=User::find($trade->userid);
++                $user->money=$user->money+$_POST['total_fee'];
++                $user->save();
++
++                $codeq=new Code();
++                $codeq->code="支付宝 充值";
++                $codeq->isused=1;
++                $codeq->type=-1;
++                $codeq->number=$_POST['total_fee'];
++                $codeq->usedatetime=date("Y-m-d H:i:s");
++                $codeq->userid=$user->id;
++                $codeq->save();
++
++
++
++
++                if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
++                    $gift_user=User::where("id", "=", $user->ref_by)->first();
++                    $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
++                    $gift_user->save();
++
++                    $Payback=new Payback();
++                    $Payback->total=$_POST['total_fee'];
++                    $Payback->userid=$user->id;
++                    $Payback->ref_by=$user->ref_by;
++                    $Payback->ref_get=$codeq->number*(Config::get('code_payback')/100);
++                    $Payback->datetime=time();
++                    $Payback->save();
+                 }
++            } elseif ($_POST['trade_status'] == 'TRADE_SUCCESS') {
++                //判断该笔订单是否在商户网站中已经做过处理
++                //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
++                //请务必判断请求时的total_fee、seller_id与通知时获取的total_fee、seller_id为一致的
++                //如果有做过处理，不执行商户的业务程序
+ 
+-                    //——请根据您的业务逻辑来编写程序（以上代码仅作参考）——
+-                        
+-                    echo "success";    //请不要修改或删除
+-                    
+-                    if (Config::get('enable_donate') == 'true') {
+-                        if ($user->is_hide == 1) {
+-                            Telegram::Send("姐姐姐姐，一位不愿透露姓名的大老爷给我们捐了 ".$codeq->number." 元呢~");
+-                        } else {
+-                            Telegram::Send("姐姐姐姐，".$user->user_name." 大老爷给我们捐了 ".$codeq->number." 元呢~");
+-                        }
+-                    }
+-                    
+-                    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+-            } else {
+-                //验证失败
+-                echo "fail";
++                //注意：
++                //付款完成后，支付宝系统发送该交易状态通知
+ 
+                 //调试用，写文本函数记录程序运行情况是否正常
+                 //logResult("这里写入想要调试的代码变量值，或其他运行的结果记录");
++
++                $user=User::find($trade->userid);
++                $user->money=$user->money+$_POST['total_fee'];
++                $user->save();
++
++                $codeq=new Code();
++                $codeq->code="支付宝 充值";
++                $codeq->isused=1;
++                $codeq->type=-1;
++                $codeq->number=$_POST['total_fee'];
++                $codeq->usedatetime=date("Y-m-d H:i:s");
++                $codeq->userid=$user->id;
++                $codeq->save();
++
++
++
++
++                if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
++                    $gift_user=User::where("id", "=", $user->ref_by)->first();
++                    $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
++                    $gift_user->save();
++
++                    $Payback=new Payback();
++                    $Payback->total=$_POST['total_fee'];
++                    $Payback->userid=$user->id;
++                    $Payback->ref_by=$user->ref_by;
++                    $Payback->ref_get=$codeq->number*(Config::get('code_payback')/100);
++                    $Payback->datetime=time();
++                    $Payback->save();
++                }
+             }
++
++              //——请根据您的业务逻辑来编写程序（以上代码仅作参考）——
++
++              echo "success";    //请不要修改或删除
++
++              if (Config::get('enable_donate') == 'true') {
++                  if ($user->is_hide == 1) {
++                      Telegram::Send("姐姐姐姐，一位不愿透露姓名的大老爷给我们捐了 ".$codeq->number." 元呢~");
++                  } else {
++                      Telegram::Send("姐姐姐姐，".$user->user_name." 大老爷给我们捐了 ".$codeq->number." 元呢~");
++                  }
++              }
++
++              /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++        } else {
++            //验证失败
++          echo "fail";
++
++          //调试用，写文本函数记录程序运行情况是否正常
++          //logResult("这里写入想要调试的代码变量值，或其他运行的结果记录");
+         }
+     }
+-    
++
+     private static function pmw_callback()
+     {
+         if (Config::get('pmw_publickey')!="") {
+@@ -292,9 +290,9 @@ class Pay
+                 'public_key' => Config::get('pmw_publickey'),
+                 'private_key' => Config::get('pmw_privatekey')
+             ));
+-            
+-            
+-            
++
++
++
+             $pingback = new \Paymentwall_Pingback($_GET, $_SERVER['REMOTE_ADDR']);
+             if ($pingback->validate()) {
+                 $virtualCurrency = $pingback->getVirtualCurrencyAmount();
+@@ -303,11 +301,11 @@ class Pay
+                 } elseif ($pingback->isCancelable()) {
+                     // withdraw the virual currency
+                 }
+-                
++
+                 $user=User::find($pingback->getUserId());
+                 $user->money=$user->money+$pingback->getVirtualCurrencyAmount();
+                 $user->save();
+-                
++
+                 $codeq=new Code();
+                 $codeq->code="Payment Wall 充值";
+                 $codeq->isused=1;
+@@ -316,15 +314,15 @@ class Pay
+                 $codeq->usedatetime=date("Y-m-d H:i:s");
+                 $codeq->userid=$user->id;
+                 $codeq->save();
+-              
+-              
+-                
+-                
++
++
++
++
+                 if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
+                     $gift_user=User::where("id", "=", $user->ref_by)->first();
+                     $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
+                     $gift_user->save();
+-                    
++
+                     $Payback=new Payback();
+                     $Payback->total=$pingback->getVirtualCurrencyAmount();
+                     $Payback->userid=$user->id;
+@@ -333,12 +331,12 @@ class Pay
+                     $Payback->datetime=time();
+                     $Payback->save();
+                 }
+-              
+-              
+-              
++
++
++
+                 echo 'OK'; // Paymentwall expects response to be OK, otherwise the pingback will be resent
+-                
+-                
++
++
+                 if (Config::get('enable_donate') == 'true') {
+                     if ($user->is_hide == 1) {
+                         Telegram::Send("姐姐姐姐，一位不愿透露姓名的大老爷给我们捐了 ".$codeq->number." 元呢~");
+@@ -353,15 +351,15 @@ class Pay
+             echo 'error';
+         }
+     }
+-    
++
+     private static function zfbjk_callback($request)
+     {
+         //您在www.zfbjk.com的商户ID
+         $alidirect_pid = Config::get("zfbjk_pid");
+         //您在www.zfbjk.com的商户密钥
+         $alidirect_key = Config::get("zfbjk_key");
+-        
+-        
++
++
+         $tradeNo = $request->getParam('tradeNo');
+         $Money = $request->getParam('Money');
+         $title = $request->getParam('title');
+@@ -374,7 +372,7 @@ class Pay
+         }
+         if (strtoupper(md5($alidirect_pid . $alidirect_key . $tradeNo . $Money . $title . $memo)) == strtoupper($Sign)) {
+             $trade = Paylist::where("tradeno", '=', $tradeNo)->first();
+-            
++
+             if ($trade != null) {
+                 exit("success");
+             } else {
+@@ -391,7 +389,7 @@ class Pay
+                 $pl->save();
+                 $user->money=$user->money+$Money;
+                 $user->save();
+-                
++
+                 $codeq=new Code();
+                 $codeq->code="支付宝充值";
+                 $codeq->isused=1;
+@@ -400,15 +398,15 @@ class Pay
+                 $codeq->usedatetime=date("Y-m-d H:i:s");
+                 $codeq->userid=$user->id;
+                 $codeq->save();
+-              
+-              
+-                
+-                
++
++
++
++
+                 if ($user->ref_by!=""&&$user->ref_by!=0&&$user->ref_by!=null) {
+                     $gift_user=User::where("id", "=", $user->ref_by)->first();
+                     $gift_user->money=($gift_user->money+($codeq->number*(Config::get('code_payback')/100)));
+                     $gift_user->save();
+-                    
++
+                     $Payback=new Payback();
+                     $Payback->total=$Money;
+                     $Payback->userid=$user->id;
+@@ -417,7 +415,7 @@ class Pay
+                     $Payback->datetime=time();
+                     $Payback->save();
+                 }
+-              
++
+                 if (Config::get('enable_donate') == 'true') {
+                     if ($user->is_hide == 1) {
+                         Telegram::Send("姐姐姐姐，一位不愿透露姓名的大老爷给我们捐了 ".$codeq->number." 元呢~");
+@@ -425,16 +423,16 @@ class Pay
+                         Telegram::Send("姐姐姐姐，".$user->user_name." 大老爷给我们捐了 ".$codeq->number." 元呢~");
+                     }
+                 }
+-                
+-                
++
++
+                 exit("Success");
+             }
+         } else {
+             exit('Fail');
+         }
+     }
+-    
+-    
++
++
+     public static function callback($request)
+     {
+         $driver = Config::get("payment_system");
+diff --git a/resources/views/material/admin/shop/create.tpl b/resources/views/material/admin/shop/create.tpl
+index cb9b714..a6d229b 100755
+--- a/resources/views/material/admin/shop/create.tpl
++++ b/resources/views/material/admin/shop/create.tpl
+@@ -16,7 +16,7 @@
+ 		<div class="container">
+ 			<div class="col-lg-12 col-sm-12">
+ 				<section class="content-inner margin-top-no">
+-					
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+@@ -25,19 +25,19 @@
+ 									<label class="floating-label" for="name">名称</label>
+ 									<input class="form-control" id="name" type="text" >
+ 								</div>
+-								
+-								
++
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="price">价格</label>
+ 									<input class="form-control" id="price" type="text" >
+ 								</div>
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="auto_renew">自动续订天数（0为不允许自动续订，其他为到了那么多天之后就会自动从用户的账户上划钱抵扣）</label>
+ 									<input class="form-control" id="auto_renew" type="text" value="0">
+ 								</div>
+-								
+-								
++
++
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -45,12 +45,12 @@
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="bandwidth">流量（GB）</label>
+ 									<input class="form-control" id="bandwidth" type="text" value="0">
+ 								</div>
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<div class="checkbox switch">
+ 										<label for="auto_reset_bandwidth">
+@@ -58,46 +58,70 @@
+ 										</label>
+ 									</div>
+ 								</div>
+-								
++
+ 							</div>
+ 						</div>
+-					</div>	
+-					
+-					
++					</div>
++
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="expire">账户有效期天数</label>
+ 									<input class="form-control" id="expire" type="text" value="0">
+ 								</div>
+ 							</div>
+ 						</div>
+-					</div>	
+-					
++					</div>
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="class">等级</label>
+ 									<input class="form-control" id="class" type="text" value="0">
+ 								</div>
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="class_expire">等级有效期天数</label>
+ 									<input class="form-control" id="class_expire" type="text" value="0">
+ 								</div>
+ 							</div>
+ 						</div>
+-					</div>	
+-							
+-					
++					</div>
++
++					<div class="card">
++						<div class="card-main">
++							<div class="card-inner">
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset_exp">多少天内</label>
++									<input class="form-control" id="reset_exp" type="number" value="0">
++								</div>
++
++
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset">每多少天</label>
++									<input class="form-control" id="reset" type="number" value="0">
++								</div>
++
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset_value">重置流量为多少G</label>
++									<input class="form-control" id="reset_value" type="number" value="0">
++								</div>
++							</div>
++						</div>
++					</div>
++
++
++
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group">
+ 									<div class="row">
+ 										<div class="col-md-10 col-md-push-1">
+@@ -108,23 +132,23 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-					
++
+ 					{include file='dialog.tpl'}
+-					
+-					
+-					
+-	
++
++
++
++
+ 			</div>
+-			
+-			
+-			
++
++
++
+ 		</div>
+ 	</main>
+ 
+-	
+-	
+-	
+-	
++
++
++
++
+ 
+ 
+ 
+@@ -146,20 +170,23 @@
+ 			{
+ 				var auto_reset_bandwidth=0;
+ 			}
+-			
++
+             $.ajax({
+                 type: "POST",
+                 url: "/admin/shop",
+                 dataType: "json",
+                 data: {
+                     name: $("#name").val(),
+-					auto_reset_bandwidth: auto_reset_bandwidth,
++										auto_reset_bandwidth: auto_reset_bandwidth,
+                     price: $("#price").val(),
+                     auto_renew: $("#auto_renew").val(),
+                     bandwidth: $("#bandwidth").val(),
+                     expire: $("#expire").val(),
+                     class: $("#class").val(),
+-					class_expire: $("#class_expire").val()
++										class_expire: $("#class_expire").val(),
++										reset: $("#reset").val(),
++										reset_value: $("#reset_value").val(),
++										reset_exp: $("#reset_exp").val(),
+                 },
+                 success: function (data) {
+                     if (data.ret) {
+@@ -187,4 +214,4 @@
+             submit();
+         });
+     })
+-</script>
+\ No newline at end of file
++</script>
+diff --git a/resources/views/material/admin/shop/edit.tpl b/resources/views/material/admin/shop/edit.tpl
+index fd90735..9ecb50b 100755
+--- a/resources/views/material/admin/shop/edit.tpl
++++ b/resources/views/material/admin/shop/edit.tpl
+@@ -16,7 +16,7 @@
+ 		<div class="container">
+ 			<div class="col-lg-12 col-sm-12">
+ 				<section class="content-inner margin-top-no">
+-					
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+@@ -25,20 +25,20 @@
+ 									<label class="floating-label" for="name">名称</label>
+ 									<input class="form-control" id="name" type="text" value="{$shop->name}">
+ 								</div>
+-								
+-								
++
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="price">价格</label>
+ 									<input class="form-control" id="price" type="text" value="{$shop->price}">
+ 								</div>
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="auto_renew">自动续订天数（0为不允许自动续订，其他为到了那么多天之后就会自动从用户的账户上划钱抵扣）</label>
+ 									<input class="form-control" id="auto_renew" type="text" value="{$shop->auto_renew}">
+ 								</div>
+-								
+-								
+-								
++
++
++
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -46,13 +46,13 @@
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="bandwidth">流量（GB）</label>
+ 									<input class="form-control" id="bandwidth" type="text" value="{$shop->bandwidth()}">
+ 								</div>
+-								
+-								
++
++
+ 								<div class="form-group form-group-label">
+ 									<div class="checkbox switch">
+ 										<label for="auto_reset_bandwidth">
+@@ -60,46 +60,68 @@
+ 										</label>
+ 									</div>
+ 								</div>
+-								
++
+ 							</div>
+ 						</div>
+-					</div>	
+-					
+-					
++					</div>
++
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="expire">账户有效期天数</label>
+ 									<input class="form-control" id="expire" type="text" value="{$shop->expire()}">
+ 								</div>
+ 							</div>
+ 						</div>
+-					</div>	
+-					
++					</div>
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="class">等级</label>
+ 									<input class="form-control" id="class" type="text" value="{$shop->user_class()}">
+ 								</div>
+-								
++
+ 								<div class="form-group form-group-label">
+ 									<label class="floating-label" for="class_expire">等级有效期天数</label>
+ 									<input class="form-control" id="class_expire" type="text" value="{$shop->class_expire()}">
+ 								</div>
+ 							</div>
+ 						</div>
+-					</div>	
+-							
+-					
++					</div>
++
++					<div class="card">
++						<div class="card-main">
++							<div class="card-inner">
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset_exp">多少天内</label>
++									<input class="form-control" id="reset_exp" type="number" value="{$shop->reset_exp()}">
++								</div>
++
++
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset">每多少天</label>
++									<input class="form-control" id="reset" type="number" value="{$shop->reset()}">
++								</div>
++
++								<div class="form-group form-group-label">
++									<label class="floating-label" for="reset_value">重置流量为多少G</label>
++									<input class="form-control" id="reset_value" type="number" value="{$shop->reset_value()}">
++								</div>
++							</div>
++						</div>
++					</div>
++
++
+ 					<div class="card">
+ 						<div class="card-main">
+ 							<div class="card-inner">
+-								
++
+ 								<div class="form-group">
+ 									<div class="row">
+ 										<div class="col-md-10 col-md-push-1">
+@@ -110,23 +132,23 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-					
++
+ 					{include file='dialog.tpl'}
+-					
+-					
+-					
+-	
++
++
++
++
+ 			</div>
+-			
+-			
+-			
++
++
++
+ 		</div>
+ 	</main>
+ 
+-	
+-	
+-	
+-	
++
++
++
++
+ 
+ 
+ 
+@@ -148,7 +170,7 @@
+ 			{
+ 				var auto_reset_bandwidth=0;
+ 			}
+-			
++
+             $.ajax({
+                 type: "PUT",
+                 url: "/admin/shop/{$shop->id}",
+@@ -161,7 +183,10 @@
+                     bandwidth: $("#bandwidth").val(),
+                     expire: $("#expire").val(),
+                     class: $("#class").val(),
+-					class_expire: $("#class_expire").val()
++										class_expire: $("#class_expire").val(),
++										reset: $("#reset").val(),
++										reset_value: $("#reset_value").val(),
++										reset_exp: $("#reset_exp").val(),
+                 },
+                 success: function (data) {
+                     if (data.ret) {
+@@ -189,4 +214,4 @@
+             submit();
+         });
+     })
+-</script>
+\ No newline at end of file
++</script>

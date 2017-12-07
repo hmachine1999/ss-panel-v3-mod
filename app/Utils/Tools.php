@@ -141,7 +141,7 @@ class Tools
 
     public static function base64_url_encode($input)
     {
-        return strtr(base64_encode($input), '+/', '-_');
+        return strtr(base64_encode($input), array('+' => '-', '/' => '_', '=' => ''));
     }
 
     public static function base64_url_decode($input)
@@ -267,6 +267,8 @@ class Tools
 
     public static function is_protocol_relay($user)
     {
+        return true;
+
         $relay_able_list = Config::getSupportParam('relay_able_protocol');
 
         if (in_array($user->protocol, $relay_able_list) || Config::get('relay_insecure_mode') == 'true') {
@@ -422,5 +424,10 @@ class Tools
         }
 
         return true;
+    }
+
+    public static function getRealIp($rawIp)
+    {
+        return str_replace("::ffff:", "", $rawIp);
     }
 }
